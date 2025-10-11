@@ -19,7 +19,6 @@ rcParams.update({'savefig.bbox': 'tight'}) # Keeps plotnine legend from being cu
 
 from functions import nhanes_link_doc, link_convert, read_data_list
 
-
 med = read_data_list('RXQ_RX')
 
 med[0] = (
@@ -168,6 +167,16 @@ message[3]
 
 message[0]
 
+
+
+# prompt_df = (
+#   pd.DataFrame({'id': [i  for i in med_use['id']],
+#                 'num': [i + 1 for i in range(len(message))],
+#                 'role': [message[i]['role'] for i in range(len(message))],
+#                 'content': [message[i]['content'] for i in range(len(message))]})
+# )
+# prompt_df.drop_duplicates('content').to_csv(here('prompts.csv'), index = False)
+
 #put it back into the dataframe for now
 med_use['chat_prompt'] = message
 
@@ -185,6 +194,192 @@ chat_answer = ollama.chat(model = 'llama3.2:1b', messages = message)
 # chat_answer['message']
 # chat_answer['message']['content']
 print(chat_answer['message']['content'])
+
+import gensim
+import gensim.downloader as api
+from gensim.models import KeyedVectors, Word2Vec
+
+
+
+# From dlab_practice.py
+# ----------Medications----------
+med[0].columns.tolist()
+med[1].columns.tolist()
+
+# [nhanes_link_doc(i, 'RXQ_RX') for i in [2013, 2015]]
+
+med[0] = (
+  med[0]
+  .rename(columns = {'seqn': 'id',
+                    'rxduse': 'taken_med_past_month',
+                    'rxddrug': 'generic_drug_name',
+                    'rxdrsc1': 'icd10_code1',
+                    'rxdrsc2': 'icd10_code2',
+                    'rxdrsc3': 'icd10_code3',
+                    'rxdcount': 'num_med_taken'}
+          )
+  .loc[:, ['id', 'taken_med_past_month', 'generic_drug_name',
+           'icd10_code1', 'icd10_code2', 'icd10_code3', 'num_med_taken']]
+)
+
+med[1] = (
+  med[1]
+  .rename(columns = {'seqn': 'id',
+                    'rxduse': 'taken_med_past_month',
+                    'rxddrug': 'generic_drug_name',
+                    'rxdrsc1': 'icd10_code1',
+                    'rxdrsc2': 'icd10_code2',
+                    'rxdrsc3': 'icd10_code3',
+                    'rxdcount': 'num_med_taken'}
+          )
+  .loc[:, ['id', 'taken_med_past_month', 'generic_drug_name',
+           'icd10_code1', 'icd10_code2', 'icd10_code3', 'num_med_taken']]
+)
+
+from bs4 import BeautifulSoup
+import requests
+
+url = "https://wwwn.cdc.gov/Nchs/Data/Nhanes/Public/2013/DataFiles/RXQ_RX_H.htm"
+response = requests.get(url)
+html_content = response.text
+
+soup = BeautifulSoup(html_content, 'html.parser')
+table_content = soup.find_all('table')
+
+len(table_content)
+
+def parse_html_table(table):
+    """Convert a BeautifulSoup table into a pandas DataFrame"""
+    rows = table.find_all('tr')
+    data = []
+    for row in rows:
+        cols = row.find_all(['td', 'th'])
+        cols = [c.get_text(strip = True) for c in cols]
+        data.append(cols)
+
+    # Assume first row is header
+    df = pd.DataFrame(data[1:], columns=data[0])
+    return df
+
+# Example: extract table 1 and table 14
+df1 = parse_html_table(table_content[1])
+df14 = parse_html_table(table_content[14])
+
+df1 = df1.clean_names(case_type = 'snake')
+df14 = df14.clean_names(case_type = 'snake')
+
+med[0]['generic_drug_name'] = med[0]['generic_drug_name'].str.decode('utf-8')
+med[0]['icd10_code1'] = med[0]['icd10_code1'].str.decode('utf-8')
+med[0]['icd10_code2'] = med[0]['icd10_code2'].str.decode('utf-8')
+med[0]['icd10_code3'] = med[0]['icd10_code3'].str.decode('utf-8')
+
+med[0][['drug_name1', 'drug_name2', 'drug_name3', 'drug_name4']] = med[0]['generic_drug_name'].str.split(';', expand = True)
+
+ex = (
+  med[0]
+  .melt(id_vars = ['id', 'taken_med_past_month', 'num_med_taken'],
+        value_vars = ['icd10_code1', 'icd10_code2', 'icd10_code3'],
+        var_name = 'icd10_code_num',
+        value_name = 'icd_10_cm_code')
+)
+
+ex2 = (
+  med[0]
+  .melt(id_vars = ['id', 'taken_med_past_month', 'num_med_taken'],
+        value_vars = ['drug_name1', 'drug_name2', 'drug_name3', 'drug_name4'],
+        var_name = 'drug_num',
+        value_name = 'drug_name')
+)
+
+ex2 = ex2.loc[(~ex2['drug_name'].isin(['', '55555', '77777', '99999']))]
+
+ex.head()
+ex2.head()
+
+[i.shape for i in [ex, ex2]] 
+
+from great_tables import GT as gt
+gt(
+  ex.merge(ex2, 'inner').head(10)
+).show()
+
+ex_join = ex.merge(ex2, 'left')
+
+ex_combo = ex_join.merge(df14, 'left', 'icd_10_cm_code')
+
+ex_combo.head()
+ex_combo.shape
+
+ex_combo = ex_combo.drop(columns = 'description') 
+
+gt(
+  ex_combo
+  .loc[ex_combo['id'] == 73558]
+  .dropna(subset = 'drug_name')
+  .drop_duplicates('drug_name')
+  .sort_values(['drug_num'])
+).show()
+
+gt(
+  ex_combo
+  .dropna(subset = 'drug_name')
+).show()
+
+# import torch
+# from transformers import pipeline
+# import accelerate
+
+# pipe = pipeline('text-generation', model = 'TinyLlama/TinyLlama-1.1B-Chat-v1.0', torch_dtype = torch.bfloat16)
+# # We use the tokenizer's chat template to format each message - see https://huggingface.co/docs/transformers/main/en/chat_templating
+# messages = [
+#     {"role": "user",
+#      "content": "What are the side effects for using insulin, ICD-10 number E11? Please print out a list of the side effects"},
+# ]
+# prompt = pipe.tokenizer.apply_chat_template(messages, tokenize = False, add_generation_prompt = True)
+# outputs = pipe(prompt, max_new_tokens = 256, do_sample = True, temperature = 0.7, top_k = 50, top_p = 0.95)
+# print(outputs[0]["generated_text"])
+
+
+gt(ex_join.loc[~ex_join['generic_drug_name'].isin(['', '55555', '77777', '99999'])]).show()
+
+ex_join = ex_join.loc[~ex_join['generic_drug_name'].isin(['', '55555', '77777', '99999'])]
+ex_join['generic_drug_name'] = ex_join['generic_drug_name'].str.title()
+
+message = []
+for drug, code in zip(ex_join['generic_drug_name'], ex_join['icd_10_cm_code']):
+  values = {'role': 'user',
+             'content': f'Does {drug} (ICD-10 number {code}) cause long-term liver damage? Please include a scale from 1 to 10 with 1 being the least likely and 10 being the most likely'}
+  message.append(values)
+
+message[0]['content']
+
+len(message)
+
+#left off here
+role
+chat_prompt = [{'content': message[i]['content']} for i in range(len(message))]
+            
+for i in range(len(message)):
+  answers = ollama.chat(model = 'llama3.2:1b', messages = message[i]['content'])
+  chat_response.append(answers)] for i in range(len(message))]
+
+
+import ollama
+
+chat_response = []
+for i in range(len(message)):
+  answers = ollama.chat(model = 'llama3.2:1b', messages = message[i]['content'])
+  chat_response.append(answers)
+  
+print(chat_response['message']['content'])
+
+llama_answer = chat_response['message']['content']
+
+import re
+
+ex_search = re.search(r'Scale:\s*\d+', llama_answer)
+ex_search
+
 
 import gensim
 import gensim.downloader as api

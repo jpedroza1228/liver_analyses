@@ -16,229 +16,142 @@ pd.set_option('display.max_columns', None)
 pd.set_option('mode.copy_on_write', True)
 rcParams.update({'savefig.bbox': 'tight'}) # Keeps plotnine legend from being cut off
 
-from functions import nhanes_link_doc, link_convert, read_data_list
+from functions import nhanes_link_doc, link_convert, read_data_list, reverse_binary, remove_and_clean
+
 
 # ----------To View Documentation for NHANES Variables----------
 print(nhanes_link_doc.__doc__) 
 # nhanes_link_doc(2013, 'TCHOL')
 
 # ----------Loading in data----------
+years = [2013, 2015, 2017]
 
-# cog = read_data_list([cog_link, cog_link2])
+# issue with cog because no cog for 2015
+# cog = read_data_list()
+
+med_cond = read_data_list('MCQ')
 sleep = read_data_list('SLQ')
-depress = read_data_list('DPQ')
+smoke = read_data_list('SMQ')
+insure = read_data_list('HIQ')
+demo = read_data_list('DEMO')
+hdl = read_data_list('HDL')
+ldl = read_data_list('TRIGLY')
+total_chol = read_data_list('TCHOL')
+bio = read_data_list('BIOPRO')
+alc = read_data_list('ALQ')
+body = read_data_list('BMX')
+diet = read_data_list('DBQ')
 
-# smoke = read_data_list('SMQ')
+# import pyarrow as pa
+# import pyarrow.parquet as pq
+
+# diet2013 = pa.Table.from_pandas(diet[0])
+# diet2015 = pa.Table.from_pandas(diet[1])
+# diet2017 = pa.Table.from_pandas(diet[2])
+
+# pq.write_table(diet2013, here('data/diet2013.parquet'))
+# pq.write_table(diet2015, here('data/diet2015.parquet'))
+# pq.write_table(diet2017, here('data/diet2017.parquet'))
+
+
+
+# not sure if including in model
+# diabetes = read_data_list('DIQ')
+# depress = read_data_list('DPQ')
 # smokes = read_data_list('SMQRTU')
-med = read_data_list('RXQ_RX')
+# med = read_data_list('RXQ_RX')
 # phy_func = read_data_list('PFQ')
 # pa = read_data_list('PAQ')
-# med_cond = read_data_list('MCQ')
-# insure = read_data_list('HIQ')
 # care_access = read_data_list('HUQ')
 # drug = read_data_list('DUQ')
-# diabetes = read_data_list('DIQ')
-# diet = read_data_list('DBQ')
-# alc = read_data_list('ALQ')
+
+
 # heart = read_data_list('CDQ')
-# demo = read_data_list('DEMO')
-# hdl = read_data_list('HDL')
-# ldl = read_data_list('TRIGLY')
 # bp = read_data_list('BPQ')
 # act_bp = read_data_list('BPX')
-# bio = read_data_list('BIOPRO')
-# body = read_data_list('BMX')
-# total_chol = read_data_list('TCHOL')
+
+
 
 # ----------Data Wrangling-----------
 
 
-# ----------Medications----------
-med[0].columns.tolist()
-med[1].columns.tolist()
+# ----------Medical Conditions-----------
+[nhanes_link_doc(year, 'MCQ') for year in years]
 
-# [nhanes_link_doc(i, 'RXQ_RX') for i in [2013, 2015]]
+[med_cond[i].columns for i in range(len(med_cond))] 
 
-med[0] = (
-  med[0]
-  .rename(columns = {'seqn': 'id',
-                    'rxduse': 'taken_med_past_month',
-                    'rxddrug': 'generic_drug_name',
-                    'rxdrsc1': 'icd10_code1',
-                    'rxdrsc2': 'icd10_code2',
-                    'rxdrsc3': 'icd10_code3',
-                    'rxdcount': 'num_med_taken'}
-          )
-  .loc[:, ['id', 'taken_med_past_month', 'generic_drug_name',
-           'icd10_code1', 'icd10_code2', 'icd10_code3', 'num_med_taken']]
+med_cond1 = [df
+ .rename(
+   columns = {
+     'seqn': 'id',
+     'mcq160_l': 'told_liver_cond',
+     'mcq365_a': 'dr_told_lose_wt',
+     'mcq365_b': 'dr_told_exercise',
+     'mcq365_c': 'dr_told_reduce_salt',
+     'mcq365_d': 'dr_told_reduce_fat',
+     'mcq370_a': 'you_control_wt',
+     'mcq370_b': 'you_increase_exercise',
+     'mcq370_c': 'you_reduce_salt',
+     'mcq370_d': 'you_reduce_fat'
+   }
+ )
+ for df in [med_cond[0], med_cond[1]]
+]
+
+med_cond2 = (
+  med_cond[2]
+  .rename(
+   columns = {
+     'seqn': 'id',
+     'mcq160_l': 'told_liver_cond',
+     'mcq366_a': 'dr_told_lose_wt',
+     'mcq366_b': 'dr_told_exercise',
+     'mcq366_c': 'dr_told_reduce_salt',
+     'mcq366_d': 'dr_told_reduce_fat',
+     'mcq371_a': 'you_control_wt',
+     'mcq371_b': 'you_increase_exercise',
+     'mcq371_c': 'you_reduce_salt',
+     'mcq371_d': 'you_reduce_fat'
+   }
+   )
 )
 
-med[1] = (
-  med[1]
-  .rename(columns = {'seqn': 'id',
-                    'rxduse': 'taken_med_past_month',
-                    'rxddrug': 'generic_drug_name',
-                    'rxdrsc1': 'icd10_code1',
-                    'rxdrsc2': 'icd10_code2',
-                    'rxdrsc3': 'icd10_code3',
-                    'rxdcount': 'num_med_taken'}
-          )
-  .loc[:, ['id', 'taken_med_past_month', 'generic_drug_name',
-           'icd10_code1', 'icd10_code2', 'icd10_code3', 'num_med_taken']]
-)
+med_cond1 = [df[['id', 'told_liver_cond', 'dr_told_lose_wt', 'dr_told_exercise',
+       'dr_told_reduce_salt', 'dr_told_reduce_fat', 'you_control_wt',
+       'you_increase_exercise', 'you_reduce_salt', 'you_reduce_fat']]
+ for df in med_cond1
+]
 
-from bs4 import BeautifulSoup
-import requests
+med_cond2 = med_cond2[['id', 'told_liver_cond', 'dr_told_lose_wt', 'dr_told_exercise',
+       'dr_told_reduce_salt', 'dr_told_reduce_fat', 'you_control_wt',
+       'you_increase_exercise', 'you_reduce_salt', 'you_reduce_fat']]
 
-url = "https://wwwn.cdc.gov/Nchs/Data/Nhanes/Public/2013/DataFiles/RXQ_RX_H.htm"
-response = requests.get(url)
-html_content = response.text
+med_cond_df = pd.concat([med_cond1[0], med_cond1[1], med_cond2])
 
-soup = BeautifulSoup(html_content, 'html.parser')
-table_content = soup.find_all('table')
+# ----------Depression Items----------
+# [nhanes_link_doc(year, 'DPQ') for year in years]
 
-len(table_content)
+[depress[i].columns for i in range(len(depress))] 
 
-def parse_html_table(table):
-    """Convert a BeautifulSoup table into a pandas DataFrame"""
-    rows = table.find_all('tr')
-    data = []
-    for row in rows:
-        cols = row.find_all(['td', 'th'])
-        cols = [c.get_text(strip = True) for c in cols]
-        data.append(cols)
+depress = [df
+ .rename(
+   columns = 
+   {'seqn': 'id',
+   'dpq010': 'little_interest_things',
+   'dpq020': 'down_depress_hopeless',
+   'dpq030': 'sleep_issues',
+   'dpq040': 'tired',
+   'dpq050': 'diet_issues',
+   'dpq060': 'feed_bad_self',
+   'dpq070': 'concentrate_issues',
+   'dpq080': 'move_speak_issues',
+   'dpq090': 'better_off_dead',
+   'dpq100': 'diff_prob_cause'}) for df in depress]
 
-    # Assume first row is header
-    df = pd.DataFrame(data[1:], columns=data[0])
-    return df
-
-# Example: extract table 1 and table 14
-df1 = parse_html_table(table_content[1])
-df14 = parse_html_table(table_content[14])
-
-df1 = df1.clean_names(case_type = 'snake')
-df14 = df14.clean_names(case_type = 'snake')
-
-med[0]['generic_drug_name'] = med[0]['generic_drug_name'].str.decode('utf-8')
-med[0]['icd10_code1'] = med[0]['icd10_code1'].str.decode('utf-8')
-med[0]['icd10_code2'] = med[0]['icd10_code2'].str.decode('utf-8')
-med[0]['icd10_code3'] = med[0]['icd10_code3'].str.decode('utf-8')
-
-med[0][['drug_name1', 'drug_name2', 'drug_name3', 'drug_name4']] = med[0]['generic_drug_name'].str.split(';', expand = True)
-
-ex = (
-  med[0]
-  .melt(id_vars = ['id', 'taken_med_past_month', 'num_med_taken'],
-        value_vars = ['icd10_code1', 'icd10_code2', 'icd10_code3'],
-        var_name = 'icd10_code_num',
-        value_name = 'icd_10_cm_code')
-)
-
-ex2 = (
-  med[0]
-  .melt(id_vars = ['id', 'taken_med_past_month', 'num_med_taken'],
-        value_vars = ['drug_name1', 'drug_name2', 'drug_name3', 'drug_name4'],
-        var_name = 'drug_num',
-        value_name = 'drug_name')
-)
-
-ex2 = ex2.loc[(~ex2['drug_name'].isin(['', '55555', '77777', '99999']))]
-
-ex.head()
-ex2.head()
-
-[i.shape for i in [ex, ex2]] 
-
-from great_tables import GT as gt
-gt(
-  ex.merge(ex2, 'inner').head(10)
-).show()
-
-ex_join = ex.merge(ex2, 'left')
-
-ex_combo = ex_join.merge(df14, 'left', 'icd_10_cm_code')
-
-ex_combo.head()
-ex_combo.shape
-
-ex_combo = ex_combo.drop(columns = 'description') 
-
-gt(
-  ex_combo
-  .loc[ex_combo['id'] == 73558]
-  .dropna(subset = 'drug_name')
-  .drop_duplicates('drug_name')
-  .sort_values(['drug_num'])
-).show()
-
-gt(
-  ex_combo
-  .dropna(subset = 'drug_name')
-).show()
-
-# import torch
-# from transformers import pipeline
-# import accelerate
-
-# pipe = pipeline('text-generation', model = 'TinyLlama/TinyLlama-1.1B-Chat-v1.0', torch_dtype = torch.bfloat16)
-# # We use the tokenizer's chat template to format each message - see https://huggingface.co/docs/transformers/main/en/chat_templating
-# messages = [
-#     {"role": "user",
-#      "content": "What are the side effects for using insulin, ICD-10 number E11? Please print out a list of the side effects"},
-# ]
-# prompt = pipe.tokenizer.apply_chat_template(messages, tokenize = False, add_generation_prompt = True)
-# outputs = pipe(prompt, max_new_tokens = 256, do_sample = True, temperature = 0.7, top_k = 50, top_p = 0.95)
-# print(outputs[0]["generated_text"])
-
-
-gt(ex_join.loc[~ex_join['generic_drug_name'].isin(['', '55555', '77777', '99999'])]).show()
-
-ex_join = ex_join.loc[~ex_join['generic_drug_name'].isin(['', '55555', '77777', '99999'])]
-ex_join['generic_drug_name'] = ex_join['generic_drug_name'].str.title()
-
-message = []
-for drug, code in zip(ex_join['generic_drug_name'], ex_join['icd_10_cm_code']):
-  values = {'role': 'user',
-             'content': f'Does {drug} (ICD-10 number {code}) cause long-term liver damage? Please include a scale from 1 to 10 with 1 being the least likely and 10 being the most likely'}
-  message.append(values)
-
-message[0]['content']
-
-len(message)
-
-#left off here
-role
-chat_prompt = [{'content': message[i]['content']} for i in range(len(message))]
-            
-for i in range(len(message)):
-  answers = ollama.chat(model = 'llama3.2:1b', messages = message[i]['content'])
-  chat_response.append(answers)] for i in range(len(message))]
-
-
-import ollama
-
-chat_response = []
-for i in range(len(message)):
-  answers = ollama.chat(model = 'llama3.2:1b', messages = message[i]['content'])
-  chat_response.append(answers)
-  
-print(chat_response['message']['content'])
-
-llama_answer = chat_response['message']['content']
-
-import re
-
-ex_search = re.search(r'Scale:\s*\d+', llama_answer)
-ex_search
-
-
-import gensim
-import gensim.downloader as api
-from gensim.models import KeyedVectors, Word2Vec
-
+depress_df = pd.concat([depress[0], depress[1], depress[2]])
 
 # ----------Sleep Issues----------
-# [nhanes_link_doc(year, 'SLQ') for year in [2013, 2015]]
+# [nhanes_link_doc(year, 'SLQ') for year in years]
 
 [print(sleep[i].info()) for i in range(len(sleep))]
 
@@ -266,69 +179,27 @@ sleep[1]['year'] = 2015
 sleep = pd.concat([sleep[0], sleep[1]])
 # sleep.head()
 
-# ----------Depression Items----------
-# [nhanes_link_doc(year, 'DPQ') for year in [2013, 2015]]
+# ----------Smoking----------
+# [nhanes_link_doc(year, 'SMQ') for year in years]
 
-depress[0] = (
-  depress[0]
-  .rename(
-    columns = {'seqn': 'id',
-               'dpq010': 'little_interest_things',
-               'dpq020': 'down_depress_hopeless',
-               'dpq030': 'sleep_issues',
-               'dpq040': 'tired',
-               'dpq050': 'diet_issues',
-               'dpq060': 'feed_bad_self',
-               'dpq070': 'concentrate_issues',
-               'dpq080': 'move_speak_issues',
-               'dpq090': 'better_off_dead',
-               'dpq100': 'diff_prob_cause'}
-  )
-)
-depress[0]['year'] = 2013
-
-depress[1] = (
-  depress[1]
-  .rename(
-    columns = {'seqn': 'id',
-               'dpq010': 'little_interest_things',
-               'dpq020': 'down_depress_hopeless',
-               'dpq030': 'sleep_issues',
-               'dpq040': 'tired',
-               'dpq050': 'diet_issues',
-               'dpq060': 'feed_bad_self',
-               'dpq070': 'concentrate_issues',
-               'dpq080': 'move_speak_issues',
-               'dpq090': 'better_off_dead',
-               'dpq100': 'diff_prob_cause'}
-  )
-)
-depress[1]['year'] = 2015
-
-depress = pd.concat([depress[0], depress[1]])
-
-# depress.head()
-
+smoke[0].columns == smoke[0].columns
 
 # ----------Merging of Data----------
 data = sleep.merge(depress, 'left', on = ['id', 'year'])
 
 # data['id'] = data['id'].astype('object')
 
-def remove_and_clean(df: pd.DataFrame,
-                     column: str,
-                     dontknow: float,
-                     refuse: float | None = None) -> pd.Series:
-  """
-  Include documentation
-  """
-  series = df[column].copy()
-  series = series.replace(dontknow, np.nan)
-  
-  if refuse is not None:
-    series = series[series != refuse]
-    
-  return series
+# depress_df_clean = pd.concat(
+#     [remove_and_clean(depress_df, i, 9, 7).reset_index(drop=True)
+#      for i in depress_df.columns],
+#     axis = 1
+# )
+# depress_df_clean.columns = depress_df.columns
+
+# depress_df_clean = depress_df_clean.round().astype('Int64')
+
+# depress_df_clean['phq_total'] = depress_df_clean.iloc[:, 1:10].sum(axis = 1)
+
 
 rules = {
   'sleep_hours': {99, 77},
@@ -359,18 +230,6 @@ clean['diff_prob_cause'].value_counts()
 clean = clean.round(0)
 
 
-def reverse_binary(df: pd.DataFrame,
-                   column: str) -> pd.Series:
-  """
-  Include documentation
-  """
-  series = df[column].copy()
-  if series.value_counts().shape[0] > 2:
-    ValueError('Clean data first to remove missing (Don\\\'t know) and Refuse responses')
-  
-  series = np.where(series == 1, 1, 0)
-  
-  return pd.Series(series)
 
 clean['dr_told_trouble_sleep'] = reverse_binary(clean, 'dr_told_trouble_sleep')
 
